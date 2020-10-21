@@ -1,0 +1,152 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Hariharan"
+date: "10/14/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+This project aims to fit a machine learning model to predict the manner in which excersice is done 
+We would be importing the dataset and cleaning it up and then use popular classification algortihms to predict the manner in which the excercise is done
+After applying these algorithms we would select the best algorithm available and apply is to the validate set given 
+
+## Importing Data Sets
+### Brief on the data set
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+```{r}
+train_data_cleaned_raw <- read.csv('pml-training.csv' , header=T)
+validate_data_raw <- read.csv('pml-testing.csv' , header=T)
+
+```
+## Observing dimensions of Data sets
+```{r}
+dim(train_data_cleaned_raw)
+dim(validate_data_raw)
+```
+We can observe we have  19622 observations and 160 columns/variables present in the training set
+
+## Loading required packages
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+```
+
+
+## Cleaning the Training Data
+### Removing columns with Missing values
+```{r}
+train_data_cleaned <- train_data_cleaned_raw[, colSums(is.na(train_data_cleaned_raw))==0]
+dim(train_data_cleaned)
+```
+### The First 7 columns in the data Set is for identifying the person performing the exercise and is irrelevant to what we are trying to predict Therefore we remove them
+```{r}
+train_data_cleaned <- train_data_cleaned[ , -c(1:7)]
+dim(train_data_cleaned)
+```
+## Now we will remove the variables that are near zero variance
+```{r}
+NZV_cleaning_data <- nearZeroVar(train_data_cleaned)
+train_data_cleaned <- train_data_cleaned[, -NZV_cleaning_data]
+dim(train_data_cleaned)
+```
+
+
+## We Split the Training data to training and testing data for prediction using various models
+The training data will be used for trianing the models and the test set to verify, The test data provided for this project is used as a validate data set on the the final model which will be selected based on perfomance
+```{r}
+set.seed(9999) 
+splitter <- createDataPartition(train_data_cleaned$classe, p = 0.8, list = FALSE)
+train_data_cleaned <- train_data_cleaned[splitter, ]
+test_data_cleaned <- train_data_cleaned[-splitter, ]
+dim(train_data_cleaned)
+```
+## Model Building
+In this section we will go thru three classification algorithms
+  - Rndom Forest
+  - Decision Trees
+  - Generalized Boosted Regresion Models
+
+For Each algorithm we will fit the training dat set and use the test set to predict and porduce confusion matrices and look into prediction accuracy
+
+
+### Modellin Using Rndom Forest
+```{r}
+set.seed(9999) 
+trainer <- trainControl(method='cv' , number = 3 , verboseIter = FALSE)
+rf_model <- train(classe ~ . , data = train_data_cleaned , method = 'rf' , trControl = trainer )
+rf_model$finalModel
+```
+#### Predicting using Rndom Forest
+```{r}
+random_forest_predict <- predict(rf_model, newdata=test_data_cleaned)
+confuse_rf <- confusionMatrix(random_forest_predict, test_data_cleaned$classe)
+confuse_rf
+```
+
+### Modellin Using Decision Trees
+
+```{r}
+set.seed(999)
+decision_tree_model <- rpart(classe ~ ., data=train_data_cleaned, method="class")
+fancyRpartPlot(decision_tree_model)
+```
+
+#### Predicting using Decision Trees
+```{r}
+decision_tree_predict <- predict(decision_tree_model, test_data_cleaned, type = "class")
+confuse_decision <- confusionMatrix(decision_tree_predict, test_data_cleaned$classe)
+confuse_decision
+```
+
+### Modellin Using Generalized Boosted Regression Models
+
+```{r}
+set.seed(9999) 
+trainer_gbm <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbm_model  <- train(classe ~ ., data=train_data_cleaned, method = "gbm", trControl = trainer_gbm, verbose = FALSE)
+gbm_model$finalModel
+```
+
+```{r}
+print(gbm_model)
+```
+
+#### Predictig using Generalized Boosted Regression Models
+```{r}
+gbm_predict <- predict(gbm_model, newdata=test_data_cleaned)
+confuse_gbm <- confusionMatrix(gbm_predict, test_data_cleaned$classe)
+confuse_gbm
+```
+
+
+## Predicting Output for the provided Test Set(Used as Validate set in this)
+
+### Applying same prepossessing to the validate set to get clean dat
+
+```{r}
+validate_data <- validate_data_raw[, colSums(is.na(validate_data_raw))==0]
+validate_data <- validate_data[ , -c(1:7)]
+dim(validate_data)
+```
+
+## Applying best Model available to make preditions
+The accurasy metrics of the implemented algorithms are as follows
+ - Radom forest Classifier -> 100 %  (Overfit Model)
+ - Decesion Tree Classifier -> 74.59 %
+ - Genearalized Boosted Regression Models -> 97.35 %
+Since Random forest model has the best accuracy among the three models used in this project, we will apply it to the validation set 
+```{r}
+validate <- predict(rf_model, newdata=validate_data)
+validate
+```
+
